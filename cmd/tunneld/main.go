@@ -21,7 +21,7 @@ import (
 )
 
 func main() {
-	addr := env("LISTEN_ADDR", ":7070")
+	addr := env("LISTEN_ADDR", ":7171")
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		os.Exit(healthcheck(addr))
 	}
@@ -45,6 +45,14 @@ func main() {
 	}
 	if p := env("CF_PROTOCOL", ""); p != "" {
 		cfg.CloudflaredArgs = append([]string{"--protocol", p}, cfg.CloudflaredArgs...)
+	}
+	if token := env("CF_API_TOKEN", ""); token != "" {
+		domain := strings.ToLower(env("CF_DOMAIN", ""))
+		if domain == "" {
+			slog.Error("CF_API_TOKEN is set but CF_DOMAIN is empty")
+			os.Exit(1)
+		}
+		cfg.Account = &tunnel.AccountConfig{APIToken: token, Domain: domain, TunnelName: env("CF_TUNNEL_NAME", "tunneld")}
 	}
 	if _, err := exec.LookPath(cfg.Cloudflared); err != nil {
 		slog.Warn("cloudflared not found; tunnels will keep retrying", "bin", cfg.Cloudflared)
@@ -85,7 +93,7 @@ func main() {
 func healthcheck(addr string) int {
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		port = "7070"
+		port = "7171"
 	}
 	c := &http.Client{Timeout: 3 * time.Second}
 	res, err := c.Get("http://127.0.0.1:" + port + "/healthz")

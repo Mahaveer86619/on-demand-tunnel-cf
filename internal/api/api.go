@@ -40,7 +40,18 @@ func Handler(m *tunnel.Manager, token string) http.Handler {
 	mux.Handle("GET /api/tunnels/{id}/url", s.auth(s.url))
 	mux.Handle("GET /api/tunnels/{id}/activity", s.auth(s.activity))
 	mux.Handle("GET /api/tunnels/{id}/cloudflared-log", s.auth(s.processLog))
+	mux.Handle("GET /api/account", s.auth(s.account))
+	mux.Handle("GET /api/account/cloudflared-log", s.auth(s.accountLog))
 	return mux
+}
+
+func (s *server) account(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.m.Account())
+}
+
+func (s *server) accountLog(w http.ResponseWriter, r *http.Request) {
+	lines, err := s.m.AccountLog(limit(r, 200))
+	reply(w, http.StatusOK, lines, err)
 }
 
 func (s *server) auth(h http.HandlerFunc) http.Handler {
@@ -192,8 +203,12 @@ func reply(w http.ResponseWriter, code int, v any, err error) {
 		writeJSON(w, http.StatusBadRequest, errBody(err.Error()))
 	case errors.Is(err, tunnel.ErrNotFound):
 		writeJSON(w, http.StatusNotFound, errBody(err.Error()))
-	case errors.Is(err, tunnel.ErrExists):
+	case errors.Is(err, tunnel.ErrExists), errors.Is(err, tunnel.ErrDNSConflict):
 		writeJSON(w, http.StatusConflict, errBody(err.Error()))
+	case errors.Is(err, tunnel.ErrNoAccount):
+		writeJSON(w, http.StatusBadRequest, errBody(err.Error()))
+	case errors.Is(err, tunnel.ErrAccountNotReady):
+		writeJSON(w, http.StatusServiceUnavailable, errBody(err.Error()))
 	default:
 		writeJSON(w, http.StatusInternalServerError, errBody(err.Error()))
 	}

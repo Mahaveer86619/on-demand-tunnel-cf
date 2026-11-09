@@ -19,11 +19,11 @@ COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared
 COPY --from=build /out/tunneld /usr/local/bin/tunneld
 COPY --from=build --chown=65532:65532 /out/data /data
 ENV DATA_DIR=/data \
-    LISTEN_ADDR=:7070 \
+    LISTEN_ADDR=:7171 \
     CLOUDFLARED_BIN=/usr/local/bin/cloudflared \
     DEFAULT_TARGET_HOST=host.docker.internal \
     GOMEMLIMIT=48MiB
 VOLUME /data
-EXPOSE 7070
+EXPOSE 7171
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s CMD ["/usr/local/bin/tunneld", "healthcheck"]
 ENTRYPOINT ["/usr/local/bin/tunneld"]

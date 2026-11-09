@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -23,6 +24,7 @@ var quickURL = regexp.MustCompile(`https://[a-z0-9-]+\.trycloudflare\.com`)
 type runner struct {
 	bin  string
 	args []string
+	env  []string
 	e    *entry
 }
 
@@ -58,6 +60,9 @@ func (r *runner) once(ctx context.Context) error {
 		return nil
 	}
 	cmd.WaitDelay = 10 * time.Second
+	if len(r.env) > 0 {
+		cmd.Env = append(os.Environ(), r.env...)
+	}
 	out, err := cmd.StderrPipe()
 	if err != nil {
 		return err

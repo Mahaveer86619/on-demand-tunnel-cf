@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pmaha/on-demand-tunnel-cf/internal/accesslog"
+	"github.com/pmaha/on-demand-tunnel-cf/internal/cloudflare"
 )
 
 var (
@@ -43,22 +44,25 @@ type Config struct {
 	AccessLog       accesslog.Options
 	RecentRequests  int
 	ProcessLogLines int
+	Account         *AccountConfig // nil runs quick tunnels only
 }
 
 type Spec struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Target    string    `json:"target"`
+	Hostname  string    `json:"hostname,omitempty"`
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Input struct {
-	Name    string `json:"name"`
-	Port    int    `json:"port"`
-	Target  string `json:"target"`
-	Enabled *bool  `json:"enabled"`
+	Name     string `json:"name"`
+	Port     int    `json:"port"`
+	Target   string `json:"target"`
+	Hostname string `json:"hostname"`
+	Enabled  *bool  `json:"enabled"`
 }
 
 type Patch struct {
@@ -81,6 +85,7 @@ const (
 
 type Status struct {
 	Spec
+	Mode      string        `json:"mode"`
 	State     State         `json:"state"`
 	URL       string        `json:"url,omitempty"`
 	URLSince  *time.Time    `json:"url_since,omitempty"`
@@ -119,6 +124,8 @@ type Manager struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	acct *account
+
 	mu      sync.RWMutex
 	entries map[string]*entry
 }
@@ -129,6 +136,9 @@ func New(cfg Config) (*Manager, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Manager{cfg: cfg, ctx: ctx, cancel: cancel, entries: map[string]*entry{}}
+	if cfg.Account != nil {
+		m.acct = &account{cfg: *cfg.Account, cf: cloudflare.New(cfg.Account.APIToken, cfg.Account.APIBase), conn: m.newEntry(Spec{ID: "account"})}
+	}
 	specs, err := m.load()
 	if err != nil {
 		cancel()
@@ -144,6 +154,9 @@ func New(cfg Config) (*Manager, error) {
 			m.start(e, s.Target)
 			e.op.Unlock()
 		}
+	}
+	if m.acct != nil {
+		go m.runAccount()
 	}
 	go m.janitor()
 	return m, nil
@@ -210,9 +223,18 @@ func (m *Manager) Create(in Input) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
+	var host string
+	if in.Hostname != "" {
+		if host, err = m.normalizeHostname(in.Hostname); err != nil {
+			return Status{}, err
+		}
+	}
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		name = defaultName(in.Port, target)
+		if host != "" {
+			name, _, _ = strings.Cut(host, ".")
+		}
 	}
 	id := slugify(name)
 	if id == "" {
@@ -223,10 +245,30 @@ func (m *Manager) Create(in Input) (Status, error) {
 		ID:        id,
 		Name:      name,
 		Target:    target,
+		Hostname:  host,
 		Enabled:   in.Enabled == nil || *in.Enabled,
 		CreatedAt: now,
 		UpdatedAt: now,
 	})
+
+	m.mu.Lock()
+	if _, ok := m.entries[id]; ok {
+		m.mu.Unlock()
+		return Status{}, ErrExists
+	}
+	for _, other := range m.entries {
+		if host != "" && other.spec.Hostname == host {
+			m.mu.Unlock()
+			return Status{}, invalid("hostname %s is already used by tunnel %q", host, other.id)
+		}
+	}
+	m.mu.Unlock()
+	// DNS goes first so a conflicting record never leaves a half-registered tunnel.
+	if host != "" {
+		if err := m.ensureDNS(host); err != nil {
+			return Status{}, err
+		}
+	}
 
 	m.mu.Lock()
 	if _, ok := m.entries[id]; ok {
@@ -248,7 +290,7 @@ func (m *Manager) Create(in Input) (Status, error) {
 		}
 		e.op.Unlock()
 	}
-	slog.Info("tunnel registered", "id", id, "target", target)
+	slog.Info("tunnel registered", "id", id, "target", target, "hostname", host)
 	return m.status(e), nil
 }
 
@@ -330,6 +372,9 @@ func (m *Manager) Delete(id string, purgeLogs bool) error {
 	e.deleted = true
 	m.stop(e)
 	e.op.Unlock()
+	if host := e.spec.Hostname; host != "" {
+		m.removeDNS(host)
+	}
 	slog.Info("tunnel deleted", "id", id, "purge_logs", purgeLogs)
 	if purgeLogs {
 		return os.RemoveAll(m.logDir(id))
@@ -368,18 +413,26 @@ func (m *Manager) WaitURL(ctx context.Context, id string) (string, error) {
 	}
 	for {
 		e.mu.Lock()
-		u, state, ch := e.url, e.state, e.changed
+		ch := e.changed
 		e.mu.Unlock()
-		if state == StateStopped {
+		var connCh chan struct{}
+		if m.acct != nil {
+			m.acct.conn.mu.Lock()
+			connCh = m.acct.conn.changed
+			m.acct.conn.mu.Unlock()
+		}
+		st := m.status(e)
+		if st.State == StateStopped {
 			return "", invalid("tunnel is disabled")
 		}
-		if u != "" && state == StateRunning {
-			return u, nil
+		if st.URL != "" && st.State == StateRunning {
+			return st.URL, nil
 		}
 		select {
 		case <-ch:
+		case <-connCh:
 		case <-ctx.Done():
-			return u, nil
+			return st.URL, nil
 		}
 	}
 }
@@ -397,11 +450,10 @@ func (m *Manager) ProcessLog(id string, limit int) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	lines := e.plog.last(limit)
-	for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
-		lines[i], lines[j] = lines[j], lines[i]
+	if e.spec.Hostname != "" && m.acct != nil {
+		e = m.acct.conn
 	}
-	return lines, nil
+	return reverse(e.plog.last(limit)), nil
 }
 
 func (m *Manager) lookup(id string) (*entry, error) {
@@ -416,7 +468,7 @@ func (m *Manager) lookup(id string) (*entry, error) {
 
 func (m *Manager) status(e *entry) Status {
 	m.mu.RLock()
-	st := Status{Spec: e.spec}
+	st := Status{Spec: e.spec, Mode: "quick"}
 	m.mu.RUnlock()
 	e.mu.Lock()
 	st.State, st.URL, st.LocalPort, st.Restarts, st.LastError = e.state, e.url, e.localPort, e.restarts, e.lastErr
@@ -425,13 +477,38 @@ func (m *Manager) status(e *entry) Status {
 		st.URLSince = &t
 	}
 	e.mu.Unlock()
+	if st.Hostname != "" {
+		m.hostnameStatus(&st)
+	}
 	st.Stats = e.stats.snapshot()
 	return st
+}
+
+// hostnameStatus derives a hostname tunnel's state from the shared connector;
+// the entry itself only owns its local proxy.
+func (m *Manager) hostnameStatus(st *Status) {
+	st.Mode = "hostname"
+	if st.State == StateError || st.LocalPort == 0 {
+		return
+	}
+	a := m.Account()
+	st.URL = "https://" + st.Hostname
+	st.State = a.State
+	if !a.Ready || st.State == "" || st.State == StateStopped {
+		st.State = StateStarting
+	}
+	if a.LastError != "" {
+		st.LastError = a.LastError
+	}
 }
 
 // start and stop must be called with e.op held.
 func (m *Manager) start(e *entry, target string) {
 	if e.cancel != nil {
+		return
+	}
+	if e.spec.Hostname != "" && m.acct == nil {
+		e.failed(ErrNoAccount)
 		return
 	}
 	u, _ := url.Parse(target)
@@ -449,7 +526,17 @@ func (m *Manager) start(e *entry, target string) {
 	ctx, cancel := context.WithCancel(m.ctx)
 	done := make(chan struct{})
 	e.proxy, e.alog, e.cancel, e.done = px, alog, cancel, done
-	e.update(func() { e.localPort = px.port() })
+	e.update(func() { e.localPort, e.state = px.port(), StateStarting })
+
+	if e.spec.Hostname != "" {
+		// Served by the shared named tunnel; only its ingress rules change.
+		close(done)
+		e.update(func() { e.state, e.lastErr = StateRunning, "" })
+		if err := m.syncIngress(); err != nil {
+			slog.Warn("sync ingress", "id", e.id, "err", err)
+		}
+		return
+	}
 
 	args := []string{"tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:" + strconv.Itoa(px.port())}
 	r := &runner{bin: m.cfg.Cloudflared, args: append(args, m.cfg.CloudflaredArgs...), e: e}
@@ -471,6 +558,11 @@ func (m *Manager) stop(e *entry) {
 	e.update(func() {
 		e.state, e.url, e.localPort = StateStopped, "", 0
 	})
+	if e.spec.Hostname != "" && m.ctx.Err() == nil {
+		if err := m.syncIngress(); err != nil {
+			slog.Warn("sync ingress", "id", e.id, "err", err)
+		}
+	}
 }
 
 func (m *Manager) janitor() {

@@ -16,9 +16,9 @@ and every request through it lands in a rotated, gzip-archived access log.
 
 ```sh
 docker compose up -d --build
-# UI: http://127.0.0.1:7070
-curl -s -XPOST localhost:7070/api/tunnels -d '{"name":"grafana","port":3000}'
-curl -s "localhost:7070/api/tunnels/grafana/url?wait=30s&format=text"
+# UI: http://127.0.0.1:7171
+curl -s -XPOST localhost:7171/api/tunnels -d '{"name":"grafana","port":3000}'
+curl -s "localhost:7171/api/tunnels/grafana/url?wait=30s&format=text"
 ```
 
 `port` means "this port on the Docker host" (`host.docker.internal`). Any LAN service works through `target`:
@@ -41,7 +41,7 @@ go build -o tunneld ./cmd/tunneld   # needs cloudflared on PATH
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `LISTEN_ADDR` | `:7070` | Admin API/UI address |
+| `LISTEN_ADDR` | `:7171` | Admin API/UI address |
 | `DATA_DIR` | `./data` (`/data` in image) | `tunnels.json` + `logs/` |
 | `ADMIN_TOKEN` | empty | If set, API requires `Authorization: Bearer <token>` |
 | `DEFAULT_TARGET_HOST` | `127.0.0.1` (`host.docker.internal` in image) | Host used when you register a bare port |

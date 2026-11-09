@@ -37,5 +37,5 @@ Tunnel object:
 Shell example:
 
 ```sh
-URL=$(curl -sf "localhost:7070/api/tunnels/grafana/url?wait=30s&format=text")
+URL=$(curl -sf "localhost:7171/api/tunnels/grafana/url?wait=30s&format=text")
 ```

@@ -34,7 +34,7 @@ func newTestManager(t *testing.T, dataDir string) *Manager {
 	t.Setenv("FAKE_CLOUDFLARED", "1")
 	m, err := New(Config{
 		DataDir:         dataDir,
-		Cloudflared:     os.Args[0],
+		Cloudflared:     testBinary(),
 		DefaultHost:     "127.0.0.1",
 		AccessLog:       accesslog.Options{MaxSize: 1 << 20},
 		RecentRequests:  10,
@@ -169,3 +169,5 @@ func TestResolveTarget(t *testing.T) {
 		}
 	}
 }
+
+func testBinary() string { return os.Args[0] }
