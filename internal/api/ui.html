@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>tunneld</title>
+<style>
+:root{color-scheme:light dark;--bg:#f7f7f8;--fg:#1d1d1f;--mut:#6b6b72;--line:#e2e2e6;--card:#fff;--acc:#f38020;--ok:#1f9d55;--warn:#b7791f;--bad:#d64545}
+@media (prefers-color-scheme:dark){:root{--bg:#121214;--fg:#ececef;--mut:#9a9aa3;--line:#2a2a2f;--card:#1a1a1d}}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg)}
+header{display:flex;align-items:baseline;gap:10px;padding:14px 20px;border-bottom:1px solid var(--line)}
+header h1{font-size:16px;margin:0}
+main{max-width:1180px;margin:0 auto;padding:20px}
+form{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+input,button{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:inherit}
+button{cursor:pointer}button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+button.danger{color:var(--bad)}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line)}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--mut);font-size:12px}
+tr.sel{outline:2px solid var(--acc);outline-offset:-2px}
+.mut{color:var(--mut)}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12.5px}
+.badge{display:inline-block;padding:0 8px;border-radius:99px;font-size:12px;border:1px solid currentColor}
+.running{color:var(--ok)}.starting,.connecting,.restarting{color:var(--warn)}.error{color:var(--bad)}.stopped{color:var(--mut)}
+.s2{color:var(--ok)}.s3{color:var(--mut)}.s4{color:var(--warn)}.s5{color:var(--bad)}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+#err{color:var(--bad);min-height:1.4em}
+h2{font-size:15px;margin:24px 0 8px}
+pre{background:var(--card);border:1px solid var(--line);padding:10px;overflow:auto;max-height:300px;font-size:12px;margin:0}
+.wrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<header><h1>tunneld</h1><span class="mut">on-demand Cloudflare quick tunnels</span></header>
+<main>
+<form id="add">
+  <input name="name" placeholder="name (e.g. grafana)" size="18">
+  <input name="target" placeholder="port or http://host:port" size="26" required>
+  <button class="primary">Add tunnel</button>
+</form>
+<div id="err"></div>
+<div class="wrap"><table>
+  <thead><tr><th>Name</th><th>Target</th><th>State</th><th>Public URL</th><th>Traffic</th><th></th></tr></thead>
+  <tbody id="rows"></tbody>
+</table></div>
+<section id="detail" hidden>
+  <h2 id="dtitle"></h2>
+  <div class="wrap"><table>
+    <thead><tr><th>Time</th><th>Client</th><th>Request</th><th>Status</th><th>Size</th><th>Duration</th></tr></thead>
+    <tbody id="activity"></tbody>
+  </table></div>
+  <h2>cloudflared output</h2>
+  <pre id="plog"></pre>
+</section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+let token = localStorage.getItem('tunneld-token') || '';
+let selected = null;
+
+async function api(method, path, body) {
+  const headers = {'Content-Type': 'application/json'};
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const res = await fetch(path, {method, headers, body: body && JSON.stringify(body)});
+  if (res.status === 401) {
+    token = prompt('Admin token') || '';
+    localStorage.setItem('tunneld-token', token);
+    throw new Error('unauthorized');
+  }
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+const ago = t => {
+  if (!t) return 'never';
+  const s = Math.max(0, Math.round((Date.now() - new Date(t)) / 1000));
+  return s < 60 ? s + 's ago' : s < 3600 ? Math.round(s / 60) + 'm ago' : s < 86400 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago';
+};
+const size = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
+const targetBody = v => /^\d+$/.test(v.trim()) ? {port: +v} : {target: v.trim()};
+
+function row(t) {
+  const s = t.stats, codes = Object.entries(s.status).map(([k, v]) => `<span class="s${k[0]}">${k} ${v}</span>`).join(' ');
+  return `<tr class="${t.id === selected ? 'sel' : ''}">
+    <td><b>${esc(t.name)}</b><div class="mut mono">${esc(t.id)}</div></td>
+    <td class="mono">${esc(t.target)}</td>
+    <td><span class="badge ${esc(t.state)}">${esc(t.state)}</span>${t.restarts ? `<div class="mut">${t.restarts} restarts</div>` : ''}${t.last_error ? `<div class="error" title="${esc(t.last_error)}">last error ⓘ</div>` : ''}</td>
+    <td class="mono">${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(t.url.replace('https://', ''))}</a><div><button data-copy="${esc(t.url)}">Copy</button></div>` : '<span class="mut">—</span>'}</td>
+    <td>${s.requests} req · ${size(s.bytes_out)}<div class="mut">${codes || ''} ${s.active ? '· ' + s.active + ' active' : ''}</div><div class="mut">last ${ago(s.last_request)}</div></td>
+    <td><div class="actions">
+      <button data-act="toggle" data-id="${esc(t.id)}" data-on="${t.enabled}">${t.enabled ? 'Disable' : 'Enable'}</button>
+      <button data-act="restart" data-id="${esc(t.id)}" ${t.enabled ? '' : 'disabled'} title="Restart cloudflared to get a new URL">New URL</button>
+      <button data-act="edit" data-id="${esc(t.id)}" data-target="${esc(t.target)}">Edit</button>
+      <button data-act="watch" data-id="${esc(t.id)}">Activity</button>
+      <button data-act="delete" data-id="${esc(t.id)}" class="danger">Delete</button>
+    </div></td></tr>`;
+}
+
+async function refresh() {
+  try {
+    const list = await api('GET', '/api/tunnels');
+    $('#rows').innerHTML = list.length ? list.map(row).join('') : '<tr><td colspan="6" class="mut">No tunnels yet. Add a port above.</td></tr>';
+    if (selected && !list.some(t => t.id === selected)) { selected = null; $('#detail').hidden = true; }
+    if (selected) await detail();
+    $('#err').textContent = '';
+  } catch (e) { $('#err').textContent = e.message; }
+}
+
+async function detail() {
+  const id = encodeURIComponent(selected);
+  const [acts, lines] = await Promise.all([
+    api('GET', `/api/tunnels/${id}/activity?limit=100`),
+    api('GET', `/api/tunnels/${id}/cloudflared-log?limit=60`),
+  ]);
+  $('#dtitle').textContent = 'Recent requests: ' + selected;
+  $('#activity').innerHTML = acts.length ? acts.map(a => `<tr>
+    <td class="mono" title="${esc(a.time)}">${new Date(a.time).toLocaleTimeString()}</td>
+    <td class="mono">${esc(a.ip)}${a.country ? ' · ' + esc(a.country) : ''}</td>
+    <td class="mono" title="${esc(a.user_agent)}">${esc(a.method)} ${esc(a.path)}</td>
+    <td class="s${String(a.status)[0]}">${a.status}</td>
+    <td>${size(a.bytes)}</td><td>${a.duration_ms} ms</td></tr>`).join('') : '<tr><td colspan="6" class="mut">No requests yet.</td></tr>';
+  const pre = $('#plog'), atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+  pre.textContent = lines.join('\n');
+  if (atEnd) pre.scrollTop = pre.scrollHeight;
+}
+
+$('#add').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const f = ev.target;
+  try {
+    await api('POST', '/api/tunnels', {name: f.name.value.trim(), ...targetBody(f.target.value)});
+    f.reset();
+    refresh();
+  } catch (e) { $('#err').textContent = e.message; }
+});
+
+$('#rows').addEventListener('click', async ev => {
+  const b = ev.target.closest('button');
+  if (!b) return;
+  if (b.dataset.copy) {
+    navigator.clipboard?.writeText(b.dataset.copy);
+    b.textContent = 'Copied';
+    return;
+  }
+  const id = b.dataset.id, path = '/api/tunnels/' + encodeURIComponent(id);
+  try {
+    switch (b.dataset.act) {
+      case 'toggle': await api('PATCH', path, {enabled: b.dataset.on !== 'true'}); break;
+      case 'restart': await api('POST', path + '/restart'); break;
+      case 'edit': {
+        const v = prompt('New port or target URL (the public URL is kept)', b.dataset.target);
+        if (!v) return;
+        await api('PATCH', path, targetBody(v));
+        break;
+      }
+      case 'watch': selected = selected === id ? null : id; $('#detail').hidden = !selected; break;
+      case 'delete': {
+        if (!confirm(`Delete tunnel "${id}"?`)) return;
+        const purge = confirm('Also delete its access logs and archives?');
+        await api('DELETE', path + (purge ? '?purge_logs=true' : ''));
+        break;
+      }
+    }
+    refresh();
+  } catch (e) { $('#err').textContent = e.message; }
+});
+
+refresh();
+setInterval(() => { if (!document.hidden) refresh(); }, 3000);
+</script>
+</body>
+</html>

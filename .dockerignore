@@ -1,0 +1,7 @@
+.git
+data
+*.exe
+/tunneld
+docs
+*.md
+.tether

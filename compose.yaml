@@ -1,0 +1,44 @@
+services:
+  tunneld:
+    build: .
+    image: on-demand-tunnel-cf:latest
+    container_name: tunneld
+    restart: unless-stopped
+    init: true
+    # The default docker0 bridge: compose creates no extra network/subnet that
+    # could collide with your LAN, and nothing touches the host's interfaces.
+    network_mode: bridge
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      # Localhost-only by default. Set BIND_ADDR=0.0.0.0 (and ADMIN_TOKEN) to manage it from the LAN.
+      - "${BIND_ADDR:-127.0.0.1}:${PORT:-7070}:7070"
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      CF_PROTOCOL: ${CF_PROTOCOL:-}
+      LOG_MAX_SIZE_MB: ${LOG_MAX_SIZE_MB:-10}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
+      LOG_MAX_ARCHIVES: ${LOG_MAX_ARCHIVES:-50}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - tunnel-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+          pids: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  tunnel-data:
