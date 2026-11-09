@@ -1,0 +1,15 @@
+$kind: http-request
+url: '{{base_url}}/api/account'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const acc = pm.response.json();
+      pm.test('account mode connected', () => {
+        pm.expect(acc.enabled, 'CF_API_TOKEN not set; run odt doctor').to.be.true;
+        pm.expect(acc.ready, acc.last_error).to.be.true;
+        pm.expect(acc.state).to.eql('running');
+      });
+      pm.test('domain matches the environment', () => pm.expect(acc.domain).to.eql(pm.environment.get('domain')));
+order: 1000

@@ -1,0 +1,5 @@
+$kind: collection
+name: '0 Health'
+description: |-
+  Liveness and the current list. No side effects.
+order: 1000

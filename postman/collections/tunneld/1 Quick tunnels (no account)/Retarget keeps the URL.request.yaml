@@ -1,0 +1,21 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/{{quick_id}}'
+method: PATCH
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "port": {{target_port}}
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('URL unchanged after retarget', () => {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.json().url).to.eql(pm.collectionVariables.get('quick_url'));
+      });
+order: 7000

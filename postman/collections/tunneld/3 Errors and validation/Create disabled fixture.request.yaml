@@ -1,0 +1,23 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "pm-fixture",
+      "port": 65000,
+      "enabled": false
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('201 and stopped', () => {
+        pm.response.to.have.status(201);
+        pm.expect(pm.response.json().state).to.eql('stopped');
+      });
+order: 2000

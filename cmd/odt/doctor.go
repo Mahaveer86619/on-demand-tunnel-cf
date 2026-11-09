@@ -269,23 +269,26 @@ func checkAccount(r *report, env *envFile) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if status, err := cf.VerifyToken(ctx); err != nil {
-		r.fail("Cloudflare rejected CF_API_TOKEN: %v", err)
-		r.fix("copy the token again (it's shown only once) or create a new one: odt help account")
-		return false
-	} else if status != "active" {
+	// Account-owned tokens can't use /user/tokens/verify, so only a zone
+	// lookup failure on top of it means the token itself is bad.
+	status, verifyErr := cf.VerifyToken(ctx)
+	if verifyErr == nil && status != "active" {
 		r.fail("CF_API_TOKEN is %s", status)
 		r.fix("create a new token: odt help account")
 		return false
 	}
-	r.ok("API token is active")
-
 	zone, err := cf.ZoneInfo(ctx, domain)
 	if err != nil {
-		r.fail("look up zone %s: %v", domain, err)
-		r.fix("give the token  Zone > Zone > Read  for this zone")
+		if verifyErr != nil {
+			r.fail("Cloudflare rejected CF_API_TOKEN: %v", verifyErr)
+			r.fix("copy the token again (it's shown only once) or create a new one: odt help account")
+		} else {
+			r.fail("look up zone %s: %v", domain, err)
+			r.fix("give the token  Zone > Zone > Read  for this zone")
+		}
 		return false
 	}
+	r.ok("API token accepted")
 	if zone == nil {
 		r.fail("%s is not visible to this token", domain)
 		r.fix("1. add the domain in the Cloudflare dashboard (Add a domain, Free plan)",

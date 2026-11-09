@@ -1,0 +1,14 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/{{quick_id}}'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const t = pm.response.json();
+      pm.test('running with the same URL', () => {
+        pm.response.to.have.status(200);
+        pm.expect(t.state).to.eql('running');
+        pm.expect(t.url).to.eql(pm.collectionVariables.get('quick_url'));
+      });
+order: 3000

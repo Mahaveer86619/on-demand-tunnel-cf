@@ -1,0 +1,23 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/{{quick_id}}'
+method: PATCH
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "enabled": false
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const t = pm.response.json();
+      pm.test('stopped, no URL', () => {
+        pm.response.to.have.status(200);
+        pm.expect(t.state).to.eql('stopped');
+        pm.expect(t).to.not.have.property('url');
+      });
+order: 10000

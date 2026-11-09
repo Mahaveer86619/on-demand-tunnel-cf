@@ -1,0 +1,12 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/{{host_id}}/activity?limit=20'
+method: GET
+queryParams:
+  - key: limit
+    value: '20'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('200 with recent requests', () => pm.response.to.have.status(200));
+order: 6000

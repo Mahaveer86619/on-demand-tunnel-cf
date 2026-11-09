@@ -1,0 +1,31 @@
+name: tunneld local
+values:
+  - key: base_url
+    value: 'http://127.0.0.1:7171'
+    enabled: true
+    type: default
+    description: tunneld admin API (BIND_ADDR/PORT in .env)
+  - key: admin_token
+    value: ''
+    enabled: true
+    type: secret
+    description: same as ADMIN_TOKEN in .env; leave empty if that is empty
+  - key: target_port
+    value: '8080'
+    enabled: true
+    type: default
+    description: port on the Docker host the test tunnels forward to; run something harmless there
+  - key: quick_name
+    value: pm-quick
+    enabled: true
+    type: default
+  - key: domain
+    value: example.com
+    enabled: true
+    type: default
+    description: same as CF_DOMAIN in .env (account flow only)
+  - key: host_label
+    value: pm-test
+    enabled: true
+    type: default
+    description: becomes pm-test.<domain> in the account flow

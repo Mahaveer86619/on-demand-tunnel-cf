@@ -1,0 +1,18 @@
+$kind: http-request
+description: |-
+  Blocks until cloudflared registered the tunnel (or 45s). Add format=text for a bare URL.
+url: '{{base_url}}/api/tunnels/{{quick_id}}/url?wait=45s'
+method: GET
+queryParams:
+  - key: wait
+    value: '45s'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('200 with a trycloudflare URL', () => {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.json().url).to.match(/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/);
+      });
+      pm.collectionVariables.set('quick_url', pm.response.json().url);
+order: 2000

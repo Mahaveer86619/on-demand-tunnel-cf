@@ -1,0 +1,6 @@
+$kind: collection
+name: '2 Account mode (own domain)'
+description: |-
+  Stable https://{{host_label}}.{{domain}} through one named tunnel. Needs CF_API_TOKEN and
+  CF_DOMAIN in .env (run `odt doctor` first). Creates a DNS record and removes it at the end.
+order: 3000

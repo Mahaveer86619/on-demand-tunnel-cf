@@ -1,0 +1,21 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/{{host_id}}'
+method: PATCH
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "enabled": false
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('stopped; ingress rule removed', () => {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.json().state).to.eql('stopped');
+      });
+order: 7000

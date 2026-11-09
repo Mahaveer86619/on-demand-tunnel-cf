@@ -1,0 +1,21 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "pm-foreign",
+      "port": 8080,
+      "hostname": "app.not-my-domain.org",
+      "enabled": false
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('400 (bad hostname, or account mode is off)', () => pm.response.to.have.status(400));
+order: 8000

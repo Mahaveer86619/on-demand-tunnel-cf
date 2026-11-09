@@ -1,0 +1,17 @@
+$kind: http-request
+description: |-
+  enabled=false means quick-tunnel-only mode (no CF_API_TOKEN). In account mode, ready=true
+  and state=running mean the named tunnel is connected.
+url: '{{base_url}}/api/account'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const a = pm.response.json();
+      pm.test('200 with account status', () => {
+        pm.response.to.have.status(200);
+        pm.expect(a).to.have.property('enabled').that.is.a('boolean');
+        pm.expect(a).to.have.property('ready').that.is.a('boolean');
+      });
+order: 3000

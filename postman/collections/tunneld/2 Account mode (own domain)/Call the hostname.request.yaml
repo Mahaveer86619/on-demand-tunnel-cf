@@ -1,0 +1,15 @@
+$kind: http-request
+description: |-
+  New DNS records can take a minute to resolve on your machine.
+url: 'https://{{host_label}}.{{domain}}/'
+method: GET
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('reached the target through your domain', () => {
+        pm.expect(pm.response.code).to.not.be.oneOf([502, 530, 1033]);
+      });
+order: 5000

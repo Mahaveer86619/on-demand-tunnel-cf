@@ -1,0 +1,29 @@
+$kind: http-request
+description: |-
+  hostname takes a single label (becomes <label>.<CF_DOMAIN>) or a full name inside CF_DOMAIN.
+  409 means a DNS record that tunneld didn't create already uses that name.
+url: '{{base_url}}/api/tunnels'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "{{host_label}}",
+      "port": {{target_port}},
+      "hostname": "{{host_label}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const t = pm.response.json();
+      pm.test('201 in hostname mode', () => {
+        pm.response.to.have.status(201);
+        pm.expect(t.mode).to.eql('hostname');
+        pm.expect(t.hostname).to.eql(pm.environment.get('host_label') + '.' + pm.environment.get('domain'));
+      });
+      pm.collectionVariables.set('host_id', t.id);
+order: 3000

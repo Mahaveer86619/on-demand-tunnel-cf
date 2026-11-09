@@ -1,0 +1,12 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/{{quick_id}}/restart'
+method: POST
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('200 and restarting', () => {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.json().state).to.be.oneOf(['starting', 'connecting', 'running']);
+      });
+order: 8000

@@ -1,0 +1,12 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels'
+method: GET
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('200 with an array', () => {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.json()).to.be.an('array');
+      });
+order: 2000

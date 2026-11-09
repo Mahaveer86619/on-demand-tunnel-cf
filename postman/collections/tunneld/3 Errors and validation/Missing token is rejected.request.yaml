@@ -1,0 +1,17 @@
+$kind: http-request
+description: |-
+  Only meaningful when ADMIN_TOKEN is set; with no token configured the API is open.
+url: '{{base_url}}/api/tunnels'
+method: GET
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      if (pm.environment.get('admin_token')) {
+        pm.test('401 without token', () => pm.response.to.have.status(401));
+      } else {
+        pm.test('open API when ADMIN_TOKEN is empty', () => pm.response.to.have.status(200));
+      }
+order: 1000

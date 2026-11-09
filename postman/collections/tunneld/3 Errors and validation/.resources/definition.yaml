@@ -1,0 +1,5 @@
+$kind: collection
+name: '3 Errors and validation'
+description: |-
+  Contract checks for error paths. Safe: anything created here is disabled and deleted.
+order: 4000

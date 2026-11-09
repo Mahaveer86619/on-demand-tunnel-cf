@@ -1,0 +1,6 @@
+$kind: collection
+name: '1 Quick tunnels (no account)'
+description: |-
+  Random https://<words>.trycloudflare.com URLs, no Cloudflare account. Run in order.
+  Creates a public tunnel to {{target_port}} on the Docker host and deletes it at the end.
+order: 2000

@@ -1,0 +1,20 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/{{quick_id}}/url?wait=45s&format=text'
+method: GET
+queryParams:
+  - key: wait
+    value: '45s'
+  - key: format
+    value: 'text'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const url = pm.response.text().trim();
+      pm.test('a different trycloudflare URL', () => {
+        pm.response.to.have.status(200);
+        pm.expect(url).to.match(/trycloudflare\.com$/);
+        pm.expect(url).to.not.eql(pm.collectionVariables.get('quick_url'));
+      });
+      pm.collectionVariables.set('quick_url', url);
+order: 9000

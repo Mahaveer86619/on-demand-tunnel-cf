@@ -2,3 +2,7 @@ data/
 *.exe
 /tunneld
 .tether/
+
+.env
+/odt
+/dist/

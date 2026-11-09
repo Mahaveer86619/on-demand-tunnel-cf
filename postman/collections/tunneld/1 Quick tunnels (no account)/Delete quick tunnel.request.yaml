@@ -1,0 +1,12 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/{{quick_id}}?purge_logs=true'
+method: DELETE
+queryParams:
+  - key: purge_logs
+    value: 'true'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('204 deleted', () => pm.response.to.have.status(204));
+order: 11000

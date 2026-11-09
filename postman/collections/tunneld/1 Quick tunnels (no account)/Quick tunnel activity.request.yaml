@@ -1,0 +1,21 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/{{quick_id}}/activity?limit=20'
+method: GET
+queryParams:
+  - key: limit
+    value: '20'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const rows = pm.response.json();
+      pm.test('200 with recent requests', () => {
+        pm.response.to.have.status(200);
+        pm.expect(rows).to.be.an('array');
+      });
+      if (rows.length) {
+        pm.test('entries carry client details', () => {
+          pm.expect(rows[0]).to.include.keys('time', 'ip', 'method', 'path', 'status', 'bytes', 'duration_ms');
+        });
+      }
+order: 5000

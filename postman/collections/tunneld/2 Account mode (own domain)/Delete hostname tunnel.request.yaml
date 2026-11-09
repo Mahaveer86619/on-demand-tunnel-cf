@@ -1,0 +1,14 @@
+$kind: http-request
+description: |-
+  Also deletes the DNS record tunneld created (never records it didn't create).
+url: '{{base_url}}/api/tunnels/{{host_id}}?purge_logs=true'
+method: DELETE
+queryParams:
+  - key: purge_logs
+    value: 'true'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('204 deleted', () => pm.response.to.have.status(204));
+order: 9000

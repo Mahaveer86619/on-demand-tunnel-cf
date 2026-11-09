@@ -1,0 +1,15 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/{{host_id}}/url?wait=30s'
+method: GET
+queryParams:
+  - key: wait
+    value: '30s'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('stable URL on your domain', () => {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.json().url).to.eql('https://' + pm.environment.get('host_label') + '.' + pm.environment.get('domain'));
+      });
+order: 4000

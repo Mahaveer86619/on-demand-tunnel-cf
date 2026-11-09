@@ -1,0 +1,15 @@
+$kind: http-request
+url: '{{base_url}}/api/account/cloudflared-log?limit=50'
+method: GET
+queryParams:
+  - key: limit
+    value: '50'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('200 with log lines', () => {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.json()).to.be.an('array');
+      });
+order: 2000

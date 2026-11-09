@@ -1,0 +1,21 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/{{host_id}}'
+method: PATCH
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "enabled": true
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('same stable URL again', () => {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.json().url).to.eql('https://' + pm.environment.get('host_label') + '.' + pm.environment.get('domain'));
+      });
+order: 8000

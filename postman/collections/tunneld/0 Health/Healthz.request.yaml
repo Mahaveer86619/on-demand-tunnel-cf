@@ -1,0 +1,14 @@
+$kind: http-request
+url: '{{base_url}}/healthz'
+method: GET
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('200 ok', () => {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.text().trim()).to.eql('ok');
+      });
+order: 1000

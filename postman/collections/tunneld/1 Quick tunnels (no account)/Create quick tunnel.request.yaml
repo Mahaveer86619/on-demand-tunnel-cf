@@ -1,0 +1,26 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "{{quick_name}}",
+      "port": {{target_port}}
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const t = pm.response.json();
+      pm.test('201 created in quick mode', () => {
+        pm.response.to.have.status(201);
+        pm.expect(t.mode).to.eql('quick');
+        pm.expect(t.enabled).to.be.true;
+        pm.expect(t.local_port).to.be.above(0);
+      });
+      pm.collectionVariables.set('quick_id', t.id);
+order: 1000

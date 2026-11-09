@@ -1,0 +1,12 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels/pm-fixture/url?wait=1s'
+method: GET
+queryParams:
+  - key: wait
+    value: '1s'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('400 tunnel is disabled', () => pm.response.to.have.status(400));
+order: 4000

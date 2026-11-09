@@ -1,0 +1,20 @@
+$kind: http-request
+url: '{{base_url}}/api/tunnels'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "pm-both",
+      "port": 8080,
+      "target": "http://192.168.1.10:8080"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('400', () => pm.response.to.have.status(400));
+order: 6000

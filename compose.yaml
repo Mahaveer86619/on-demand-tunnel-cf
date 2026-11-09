@@ -16,10 +16,15 @@ services:
     environment:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       CF_PROTOCOL: ${CF_PROTOCOL:-}
+      CF_EXTRA_ARGS: ${CF_EXTRA_ARGS:-}
+      CF_API_TOKEN: ${CF_API_TOKEN:-}
+      CF_DOMAIN: ${CF_DOMAIN:-}
+      CF_TUNNEL_NAME: ${CF_TUNNEL_NAME:-tunneld}
       LOG_MAX_SIZE_MB: ${LOG_MAX_SIZE_MB:-10}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
       LOG_MAX_ARCHIVES: ${LOG_MAX_ARCHIVES:-50}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      RECENT_REQUESTS: ${RECENT_REQUESTS:-200}
     volumes:
       - tunnel-data:/data
     read_only: true
