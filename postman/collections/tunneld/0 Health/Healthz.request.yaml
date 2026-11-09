@@ -1,4 +1,5 @@
 $kind: http-request
+name: Healthz
 url: '{{base_url}}/healthz'
 method: GET
 auth:

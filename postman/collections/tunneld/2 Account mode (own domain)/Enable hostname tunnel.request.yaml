@@ -1,4 +1,5 @@
 $kind: http-request
+name: Enable hostname tunnel
 url: '{{base_url}}/api/tunnels/{{host_id}}'
 method: PATCH
 headers:

@@ -1,4 +1,5 @@
 $kind: http-request
+name: Create quick tunnel
 url: '{{base_url}}/api/tunnels'
 method: POST
 headers:

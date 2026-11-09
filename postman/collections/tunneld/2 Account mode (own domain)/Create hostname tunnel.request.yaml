@@ -1,4 +1,5 @@
 $kind: http-request
+name: Create hostname tunnel
 description: |-
   hostname takes a single label (becomes <label>.<CF_DOMAIN>) or a full name inside CF_DOMAIN.
   409 means a DNS record that tunneld didn't create already uses that name.

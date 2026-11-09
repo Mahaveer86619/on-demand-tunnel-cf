@@ -1,4 +1,5 @@
 $kind: http-request
+name: Account cloudflared log
 url: '{{base_url}}/api/account/cloudflared-log?limit=50'
 method: GET
 queryParams:

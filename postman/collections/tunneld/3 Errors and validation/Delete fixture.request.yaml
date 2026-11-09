@@ -1,4 +1,5 @@
 $kind: http-request
+name: Delete fixture
 url: '{{base_url}}/api/tunnels/pm-fixture?purge_logs=true'
 method: DELETE
 queryParams:

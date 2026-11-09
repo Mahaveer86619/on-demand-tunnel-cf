@@ -1,4 +1,5 @@
 $kind: http-request
+name: Account status
 description: |-
   enabled=false means quick-tunnel-only mode (no CF_API_TOKEN). In account mode, ready=true
   and state=running mean the named tunnel is connected.

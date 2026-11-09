@@ -1,4 +1,5 @@
 $kind: http-request
+name: Call the public URL
 description: |-
   Goes through Cloudflare to your service. A fresh quick tunnel can take a few seconds
   before DNS resolves; rerun if it fails right away.

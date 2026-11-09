@@ -1,4 +1,5 @@
 $kind: http-request
+name: Restart for a new URL
 url: '{{base_url}}/api/tunnels/{{quick_id}}/restart'
 method: POST
 scripts:

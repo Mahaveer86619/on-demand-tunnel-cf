@@ -1,4 +1,5 @@
 $kind: http-request
+name: Wait for the new URL
 url: '{{base_url}}/api/tunnels/{{quick_id}}/url?wait=45s&format=text'
 method: GET
 queryParams:

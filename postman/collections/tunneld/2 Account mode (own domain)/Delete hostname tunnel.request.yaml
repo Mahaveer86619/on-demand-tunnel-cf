@@ -1,4 +1,5 @@
 $kind: http-request
+name: Delete hostname tunnel
 description: |-
   Also deletes the DNS record tunneld created (never records it didn't create).
 url: '{{base_url}}/api/tunnels/{{host_id}}?purge_logs=true'

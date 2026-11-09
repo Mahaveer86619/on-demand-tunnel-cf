@@ -1,4 +1,5 @@
 $kind: http-request
+name: List tunnels
 url: '{{base_url}}/api/tunnels'
 method: GET
 scripts:

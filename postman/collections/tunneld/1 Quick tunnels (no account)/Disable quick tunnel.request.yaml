@@ -1,4 +1,5 @@
 $kind: http-request
+name: Disable quick tunnel
 url: '{{base_url}}/api/tunnels/{{quick_id}}'
 method: PATCH
 headers:

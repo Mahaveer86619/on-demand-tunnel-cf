@@ -1,0 +1,1398 @@
+{
+  "info": {
+    "_postman_id": "b78d2b96-419b-4632-a567-27b401e1bf81",
+    "name": "tunneld",
+    "description": "API of tunneld (on-demand-tunnel-cf): publishes local ports through Cloudflare tunnels.\n\nPick the \"tunneld local\" environment and set admin_token if ADMIN_TOKEN is set in .env.\nRun the folders in order: 1 is the no-account flow (random trycloudflare.com URLs),\n2 is the account flow (stable hostnames on your domain; needs CF_API_TOKEN and CF_DOMAIN).\nRequests in folders 1 and 2 open real public tunnels to target_port, so point it at\nsomething harmless (e.g. `python -m http.server 8080`). Folder 3 never exposes anything.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{admin_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (pm.response.code >= 400) {",
+          "  pm.test('error body has an \"error\" message', () => {",
+          "    pm.expect(pm.response.json()).to.have.property('error').that.is.a('string');",
+          "  });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "quick_id",
+      "value": "",
+      "type": "string",
+      "description": "set by \"Create quick tunnel\""
+    },
+    {
+      "key": "quick_url",
+      "value": "",
+      "type": "string",
+      "description": "set by \"Wait for quick URL\""
+    },
+    {
+      "key": "host_id",
+      "value": "",
+      "type": "string",
+      "description": "set by \"Create hostname tunnel\""
+    }
+  ],
+  "item": [
+    {
+      "name": "0 Health",
+      "description": "Liveness and the current list. No side effects.",
+      "item": [
+        {
+          "name": "Healthz",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 ok', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text().trim()).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/healthz",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List tunnels",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 with an array', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Account status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "pm.test('200 with account status', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(a).to.have.property('enabled').that.is.a('boolean');",
+                  "  pm.expect(a).to.have.property('ready').that.is.a('boolean');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/account",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "account"
+              ]
+            },
+            "description": "enabled=false means quick-tunnel-only mode (no CF_API_TOKEN). In account mode, ready=true and state=running mean the named tunnel is connected."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "1 Quick tunnels (no account)",
+      "description": "Random https://<words>.trycloudflare.com URLs, no Cloudflare account. Run in order.\n\nCreates a public tunnel to {{target_port}} on the Docker host and deletes it at the end.",
+      "item": [
+        {
+          "name": "Create quick tunnel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const t = pm.response.json();",
+                  "pm.test('201 created in quick mode', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(t.mode).to.eql('quick');",
+                  "  pm.expect(t.enabled).to.be.true;",
+                  "  pm.expect(t.local_port).to.be.above(0);",
+                  "});",
+                  "pm.collectionVariables.set('quick_id', t.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{quick_name}}\",\n  \"port\": {{target_port}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Wait for quick URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 with a trycloudflare URL', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().url).to.match(/^https:\\/\\/[a-z0-9-]+\\.trycloudflare\\.com$/);",
+                  "});",
+                  "pm.collectionVariables.set('quick_url', pm.response.json().url);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{quick_id}}/url?wait=45s",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{quick_id}}",
+                "url"
+              ],
+              "query": [
+                {
+                  "key": "wait",
+                  "value": "45s"
+                }
+              ]
+            },
+            "description": "Blocks until cloudflared registered the tunnel (or 45s). Add format=text for a bare URL."
+          },
+          "response": []
+        },
+        {
+          "name": "Get quick tunnel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const t = pm.response.json();",
+                  "pm.test('running with the same URL', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(t.state).to.eql('running');",
+                  "  pm.expect(t.url).to.eql(pm.collectionVariables.get('quick_url'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{quick_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{quick_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Call the public URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('reached the target (not a tunnel error)', () => {",
+                  "  pm.expect(pm.response.code).to.not.be.oneOf([502, 530, 1033]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{quick_url}}"
+            },
+            "description": "Goes through Cloudflare to your service. A fresh quick tunnel can take a few seconds before DNS resolves; rerun if it fails right away."
+          },
+          "response": []
+        },
+        {
+          "name": "Quick tunnel activity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const rows = pm.response.json();",
+                  "pm.test('200 with recent requests', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(rows).to.be.an('array');",
+                  "});",
+                  "if (rows.length) {",
+                  "  pm.test('entries carry client details', () => {",
+                  "    pm.expect(rows[0]).to.include.keys('time', 'ip', 'method', 'path', 'status', 'bytes', 'duration_ms');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{quick_id}}/activity?limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{quick_id}}",
+                "activity"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Quick tunnel cloudflared log",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 with log lines', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{quick_id}}/cloudflared-log?limit=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{quick_id}}",
+                "cloudflared-log"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Retarget keeps the URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('URL unchanged after retarget', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().url).to.eql(pm.collectionVariables.get('quick_url'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"port\": {{target_port}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{quick_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{quick_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Restart for a new URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 and restarting', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().state).to.be.oneOf(['starting', 'connecting', 'running']);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{quick_id}}/restart",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{quick_id}}",
+                "restart"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Wait for the new URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const url = pm.response.text().trim();",
+                  "pm.test('a different trycloudflare URL', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(url).to.match(/trycloudflare\\.com$/);",
+                  "  pm.expect(url).to.not.eql(pm.collectionVariables.get('quick_url'));",
+                  "});",
+                  "pm.collectionVariables.set('quick_url', url);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{quick_id}}/url?wait=45s&format=text",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{quick_id}}",
+                "url"
+              ],
+              "query": [
+                {
+                  "key": "wait",
+                  "value": "45s"
+                },
+                {
+                  "key": "format",
+                  "value": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Disable quick tunnel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const t = pm.response.json();",
+                  "pm.test('stopped, no URL', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(t.state).to.eql('stopped');",
+                  "  pm.expect(t).to.not.have.property('url');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{quick_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{quick_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete quick tunnel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 deleted', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{quick_id}}?purge_logs=true",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{quick_id}}"
+              ],
+              "query": [
+                {
+                  "key": "purge_logs",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2 Account mode (own domain)",
+      "description": "Stable https://{{host_label}}.{{domain}} through one named tunnel. Needs CF_API_TOKEN and\nCF_DOMAIN in .env (run `odt doctor` first). Creates a DNS record and removes it at the end.",
+      "item": [
+        {
+          "name": "Account must be ready",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const acc = pm.response.json();",
+                  "pm.test('account mode connected', () => {",
+                  "  pm.expect(acc.enabled, 'CF_API_TOKEN not set; run odt doctor').to.be.true;",
+                  "  pm.expect(acc.ready, acc.last_error).to.be.true;",
+                  "  pm.expect(acc.state).to.eql('running');",
+                  "});",
+                  "pm.test('domain matches the environment', () => pm.expect(acc.domain).to.eql(pm.environment.get('domain')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/account",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "account"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Account cloudflared log",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 with log lines', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/account/cloudflared-log?limit=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "account",
+                "cloudflared-log"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create hostname tunnel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const t = pm.response.json();",
+                  "pm.test('201 in hostname mode', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(t.mode).to.eql('hostname');",
+                  "  pm.expect(t.hostname).to.eql(pm.environment.get('host_label') + '.' + pm.environment.get('domain'));",
+                  "});",
+                  "pm.collectionVariables.set('host_id', t.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{host_label}}\",\n  \"port\": {{target_port}},\n  \"hostname\": \"{{host_label}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels"
+              ]
+            },
+            "description": "hostname takes a single label (becomes <label>.<CF_DOMAIN>) or a full name inside CF_DOMAIN.\n409 means a DNS record that tunneld didn't create already uses that name."
+          },
+          "response": []
+        },
+        {
+          "name": "Wait for hostname URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('stable URL on your domain', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().url).to.eql('https://' + pm.environment.get('host_label') + '.' + pm.environment.get('domain'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{host_id}}/url?wait=30s",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{host_id}}",
+                "url"
+              ],
+              "query": [
+                {
+                  "key": "wait",
+                  "value": "30s"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Call the hostname",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('reached the target through your domain', () => {",
+                  "  pm.expect(pm.response.code).to.not.be.oneOf([502, 530, 1033]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://{{host_label}}.{{domain}}/"
+            },
+            "description": "New DNS records can take a minute to resolve on your machine."
+          },
+          "response": []
+        },
+        {
+          "name": "Hostname tunnel activity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 with recent requests', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{host_id}}/activity?limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{host_id}}",
+                "activity"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Disable hostname tunnel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('stopped; ingress rule removed', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().state).to.eql('stopped');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{host_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{host_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Enable hostname tunnel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('same stable URL again', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().url).to.eql('https://' + pm.environment.get('host_label') + '.' + pm.environment.get('domain'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{host_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{host_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete hostname tunnel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 deleted', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/{{host_id}}?purge_logs=true",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "{{host_id}}"
+              ],
+              "query": [
+                {
+                  "key": "purge_logs",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Also deletes the DNS record tunneld created (never records it didn't create)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3 Errors and validation",
+      "description": "Contract checks for error paths. Safe: anything created here is disabled and deleted.",
+      "item": [
+        {
+          "name": "Missing token is rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('admin_token')) {",
+                  "  pm.test('401 without token', () => pm.response.to.have.status(401));",
+                  "} else {",
+                  "  pm.test('open API when ADMIN_TOKEN is empty', () => pm.response.to.have.status(200));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels"
+              ]
+            },
+            "description": "Only meaningful when ADMIN_TOKEN is set; with no token configured the API is open."
+          },
+          "response": []
+        },
+        {
+          "name": "Create disabled fixture",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 and stopped', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(pm.response.json().state).to.eql('stopped');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"pm-fixture\",\n  \"port\": 65000,\n  \"enabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Duplicate name is 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 conflict', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"PM Fixture\",\n  \"port\": 65001,\n  \"enabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Disabled tunnel has no URL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 tunnel is disabled', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/pm-fixture/url?wait=1s",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "pm-fixture",
+                "url"
+              ],
+              "query": [
+                {
+                  "key": "wait",
+                  "value": "1s"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid port is 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"pm-bad-port\",\n  \"port\": 70000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Port and target together is 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"pm-both\",\n  \"port\": 8080,\n  \"target\": \"http://192.168.1.10:8080\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unknown field is 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 invalid JSON', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error).to.include('unknown field');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"pm-typo\",\n  \"prot\": 8080\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Hostname outside the domain is rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 (bad hostname, or account mode is off)', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"pm-foreign\",\n  \"port\": 8080,\n  \"hostname\": \"app.not-my-domain.org\",\n  \"enabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tunnels",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unknown tunnel is 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/does-not-exist",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "does-not-exist"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete fixture",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tunnels/pm-fixture?purge_logs=true",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tunnels",
+                "pm-fixture"
+              ],
+              "query": [
+                {
+                  "key": "purge_logs",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

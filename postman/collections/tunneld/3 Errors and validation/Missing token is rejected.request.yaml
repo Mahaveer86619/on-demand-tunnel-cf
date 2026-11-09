@@ -1,4 +1,5 @@
 $kind: http-request
+name: Missing token is rejected
 description: |-
   Only meaningful when ADMIN_TOKEN is set; with no token configured the API is open.
 url: '{{base_url}}/api/tunnels'

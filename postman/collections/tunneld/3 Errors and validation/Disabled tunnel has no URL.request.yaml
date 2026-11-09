@@ -1,4 +1,5 @@
 $kind: http-request
+name: Disabled tunnel has no URL
 url: '{{base_url}}/api/tunnels/pm-fixture/url?wait=1s'
 method: GET
 queryParams:

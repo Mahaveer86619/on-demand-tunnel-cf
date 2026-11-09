@@ -1,4 +1,5 @@
 $kind: http-request
+name: Wait for quick URL
 description: |-
   Blocks until cloudflared registered the tunnel (or 45s). Add format=text for a bare URL.
 url: '{{base_url}}/api/tunnels/{{quick_id}}/url?wait=45s'

@@ -1,4 +1,5 @@
 $kind: http-request
+name: Quick tunnel activity
 url: '{{base_url}}/api/tunnels/{{quick_id}}/activity?limit=20'
 method: GET
 queryParams:

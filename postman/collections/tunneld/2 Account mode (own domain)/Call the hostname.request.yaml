@@ -1,4 +1,5 @@
 $kind: http-request
+name: Call the hostname
 description: |-
   New DNS records can take a minute to resolve on your machine.
 url: 'https://{{host_label}}.{{domain}}/'

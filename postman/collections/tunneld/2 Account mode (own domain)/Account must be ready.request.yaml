@@ -1,4 +1,5 @@
 $kind: http-request
+name: Account must be ready
 url: '{{base_url}}/api/account'
 method: GET
 scripts:

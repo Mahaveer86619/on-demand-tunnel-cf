@@ -54,4 +54,8 @@ go build -o tunneld ./cmd/tunneld   # needs cloudflared on PATH
 | `RECENT_REQUESTS` | `200` | In-memory activity entries per tunnel |
 | `LOG_LEVEL` | `info` | `debug` shows upstream errors |
 
+## Testing with Postman
+
+Import `postman/tunneld.postman_collection.json` and `postman/tunneld_local.postman_environment.json` directly into Postman (**Import** -> select both files). Select the **tunneld local** environment to run the test suite.
+
 More detail: [docs/](docs/README.md).

@@ -1,4 +1,5 @@
 $kind: http-request
+name: Unknown tunnel is 404
 url: '{{base_url}}/api/tunnels/does-not-exist'
 method: GET
 scripts:
